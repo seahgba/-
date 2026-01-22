@@ -59,3 +59,105 @@ const App: React.FC = () => {
       }));
       setApplications(formatted);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchFromSupabase();
+  }, [fetchFromSupabase]);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    localStorage.setItem('currentUser', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentView('dashboard');
+    localStorage.removeItem('currentUser');
+  };
+
+  const updateUserProfile = (updatedUser: User) => {
+    setAllUsers(prev => {
+      const next = prev.map(u => u.loginId === updatedUser.loginId ? { ...u, ...updatedUser } : u);
+      localStorage.setItem(APP_USERS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const addApplication = async (appData: any) => {
+    const { error } = await supabase
+      .from('requests')
+      .insert([{
+        applicant_name: currentUser?.username || appData.username,
+        department: appData.department,
+        reason: appData.reason,
+        status: 'pending',
+        program: appData.program,
+        student_id: appData.studentId,
+        email: appData.email
+      }]);
+
+    if (error) {
+      alert("儲存失敗: " + error.message);
+    } else {
+      fetchFromSupabase();
+    }
+  };
+
+  const updateApplicationStatus = async (id: string, status: ApplicationStatus) => {
+    const { error } = await supabase
+      .from('requests')
+      .update({ status: status })
+      .eq('id', id);
+
+    if (!error) {
+      fetchFromSupabase();
+    }
+  };
+
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} users={allUsers} />;
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
+      <Sidebar 
+        user={currentUser} 
+        onLogout={handleLogout} 
+        onUpdateUser={updateUserProfile} 
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        applications={applications}
+      />
+      <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="max-w-7xl mx-auto">
+          {currentUser.role === 'Admin' ? (
+            currentView === 'dashboard' ? (
+              <AdminDashboard 
+                applications={applications} 
+                onUpdateStatus={updateApplicationStatus} 
+              />
+            ) : (
+              <UserManagement 
+                users={allUsers} 
+                currentUserLoginId={currentUser.loginId}
+                onUpdateUser={updateUserProfile}
+                onAddUser={(u) => setAllUsers(prev => [...prev, u])}
+                onBatchAddUsers={(users) => setAllUsers(prev => [...prev, ...users])}
+                onDeleteUser={(id) => setAllUsers(prev => prev.filter(u => u.loginId !== id))}
+              />
+            )
+          ) : (
+            <UserDashboard 
+              username={currentUser.username}
+              applications={applications.filter(a => a.username === currentUser.username)}
+              onSubmit={addApplication}
+            />
+          )}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default App;
